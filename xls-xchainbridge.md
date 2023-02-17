@@ -81,7 +81,7 @@ A cross-chain transfer moves assets from the locking chain to the issuing chain,
 
 In this scenario, a user is trying to transfer funds from their account on the source chain to their account on the destination chain.
 
-1.  The user creates a cross-chain claim ID on the destination chain, via the **`XChainCreateClaimID`** transaction. This creates a **`XChainClaimID`** ledger object.
+1.  The user creates a cross-chain claim ID on the destination chain, via the **`XChainCreateClaimID`** transaction. This creates a **`XChainOwnedClaimID`** ledger object.
 2.  The user submits a **`XChainCommit`** transaction on the source chain, attaching the claimed cross-chain claim ID and including a reward amount (`SignatureReward`) for the witness servers. This locks or burns the asset on the source chain, depending on whether the source chain is a locking or issuing chain.
 3.  The **witness server** signs an attestation saying that the funds were locked/burned on the source chain. This is then submitted as a **`XChainAddClaimAttestation`** transaction on the destination chain.
 4.  When there is a quorum of witness attestations, the funds can be claimed on the destination chain. If a destination account is included in the initial transfer, then the funds automatically transfer when quorum is reached. Otherwise, the user can submit a **`XChainClaim`** transaction for the transferred value on the destination chain.
@@ -102,7 +102,7 @@ In this scenario, a user is trying to transfer funds from their account on the s
 Account creation must happen via a different means. This is because the cross-chain transfer process requires an existing account on the destination chain, so if the user does not have an account on the destination chain, they have no way to transfer funds.
 
 1. The user submits a **`XChainAccountCreateCommit`** transaction on the source chain. This locks or burns the asset on the source chain, depending on whether the source chain is a locking or issuing chain.
-2. The witness servers each sign their attestations on the destination chain and submit them as **`XChainAddAccountCreateAttestation`** transactions. Since there is no `XChainClaimID` object on the destination chain to keep track of the attestations, the ledger instead creates a **`XChainCreateAccountClaimID`** object upon receiving the first attestation.
+2. The witness servers each sign their attestations on the destination chain and submit them as **`XChainAddAccountCreateAttestation`** transactions. Since there is no `XChainOwnedClaimID` object on the destination chain to keep track of the attestations, the ledger instead creates a **`XChainOwnedCreateAccountClaimID`** object upon receiving the first attestation.
 3. When there is a quorum of witness attestations, the funds are automatically transferred to the new account on the destination chain. The rewards are also automatically distributed to the witness servers’ accounts on the destination chain.
 
 ## 2. Changes to the XRPL
@@ -113,9 +113,9 @@ We propose three new objects:
 
 1. A **`Bridge`** is a new object that describes a single cross-chain bridge.
 
-2. A **`XChainClaimID`** is a new object that describes a single cross-chain claim ID.
+2. A **`XChainOwnedClaimID`** is a new object that describes a single cross-chain claim ID.
 
-3. A **`XChainCreateAccountClaimID`** is a new object that describes an account to be created on the issuing chain.
+3. A **`XChainOwnedCreateAccountClaimID`** is a new object that describes an account to be created on the issuing chain.
 
 #### 2.1.1. The **`Bridge`** object
 
@@ -124,7 +124,7 @@ The **`Bridge`** object represents one end of a cross-chain bridge and holds dat
 The ledger object is owned by the door account and defines the bridge parameters. It is created with a `XChainCreateBridge` transaction, and modified with a `XChainModifyBridge`
 transaction (only the `MinAccountCreateAmount` and `SignaturesReward` may be changed). It cannot be deleted.
 
-_Note:_ The signatures used to attest to chain events are on the `XChainClaimID` ledger objects, not on this ledger object. 
+_Note:_ The signatures used to attest to chain events are on the `XChainOwnedClaimID` and `XChainOwnedAccountCreateClaimID` ledger objects, not on this ledger object. 
 
 ##### 2.1.1.1. Fields
 
@@ -189,15 +189,15 @@ A counter used to order the execution of account create transactions. It is incr
 ###### 2.1.1.1.7. `XChainClaimID`
 The value of the next `XChainClaimID` to be created.
 
-#### 2.1.2. The **`XChainClaimID`** object
+#### 2.1.2. The **`XChainOwnedClaimID`** object
 
-The `XChainClaimID` ledger object must be acquired on the destination before submitting a `XChainCommit` on the source chain. Its purpose is to prevent transaction replay attacks and is also used as a place to collect attestations from witness servers. 
+The `XChainOwnedClaimID` ledger object must be acquired on the destination before submitting a `XChainCommit` on the source chain. Its purpose is to prevent transaction replay attacks and is also used as a place to collect attestations from witness servers. 
 
-A `XChainCreateClaimID` transaction is used to create a new `XChainClaimID`. It is destroyed when the funds are successfully claimed on the destination chain.
+A `XChainCreateClaimID` transaction is used to create a new `XChainOwnedClaimID`. It is destroyed when the funds are successfully claimed on the destination chain.
 
 ##### 2.1.2.1. Fields
 
-A **`XChainClaimID`** object may have the following fields:
+A **`XChainOwnedClaimID`** object may have the following fields:
 
 | Field Name | Required? | JSON Type | Internal Type |
 |------------|-----------|-----------|---------------|
@@ -210,7 +210,7 @@ A **`XChainClaimID`** object may have the following fields:
 
 ###### 2.1.2.1.1. `LedgerIndex`
 
-The ledger index is a hash of a unique prefix for `XChainClaimID`s, the actual `XChainClaimID` value, and the fields in `XChainBridge`.
+The ledger index is a hash of a unique prefix for `XChainOwnedClaimID`s, the actual `XChainClaimID` value, and the fields in `XChainBridge`.
 
 ###### 2.1.2.1.2. `XChainBridge`
 
@@ -234,14 +234,14 @@ See the `XChainAddClaimAttestation` section for more details on what this looks 
 
 The unique sequence number for a cross-chain transfer.
 
-#### 2.1.3. The **`XChainCreateAccountClaimID`** object
+#### 2.1.3. The **`XChainOwnedCreateAccountClaimID`** object
 
-The `XChainCreateAccountClaimID` ledger object is used to collect signatures for creating an account via a cross-chain transfer. It is created when an `XChainAddAccountCreateAttestation` transaction adds a signature attesting to a `XChainAccountCreateCommit` transaction and the
+The `XChainOwnedCreateAccountClaimID` ledger object is used to collect signatures for creating an account via a cross-chain transfer. It is created when an `XChainAddAccountCreateAttestation` transaction adds a signature attesting to a `XChainAccountCreateCommit` transaction and the
 `XChainAccountCreateCount` is greater than or equal to the current `XChainAccountClaimCount` on the `Bridge` ledger object.
 
 ##### 2.1.3.1. Fields
 
-A **`XChainCreateAccountClaimID`** object may have the following fields:
+A **`XChainOwnedCreateAccountClaimID`** object may have the following fields:
 
 | Field Name | Required? | JSON Type | Internal Type |
 |------------|-----------|-----------|---------------|
@@ -252,7 +252,7 @@ A **`XChainCreateAccountClaimID`** object may have the following fields:
 
 ###### 2.1.3.1.1. `LedgerIndex`
 
-The ledger index is a hash of a unique prefix for `XChainCreateAccountClaimID`s, the
+The ledger index is a hash of a unique prefix for `XChainOwnedCreateAccountClaimID`s, the
 `XChainAccountCreateCount`, and the fields in `XChainBridge`.
 
 ###### 2.1.3.1.2. `XChainBridge`
@@ -338,7 +338,7 @@ Specifies the flags for this transaction. In addition to the universal transacti
 
 #### 2.3.1. The **`XChainCreateClaimID`** transaction
 
-The `XChainCreateClaimID` transaction is the first step in a cross-chain transfer. The claim ID must be created on the destination chain before the `XChainCommit` transaction (which must reference this number) can be sent on the source chain. The account that will send the `XChainCommit` on the source chain must be specified in this transaction (see note on the `SourceAccount` field in the `XChainClaimID` ledger object for
+The `XChainCreateClaimID` transaction is the first step in a cross-chain transfer. The claim ID must be created on the destination chain before the `XChainCommit` transaction (which must reference this number) can be sent on the source chain. The account that will send the `XChainCommit` on the source chain must be specified in this transaction (see note on the `SourceAccount` field in the `XChainOwnedClaimID` ledger object for
 justification). The actual sequence number must be retrieved from a validated ledger.
 
 ##### 2.3.1.1. Fields
@@ -353,7 +353,7 @@ The `XChainCreateClaimID` transaction contains the following fields:
 
 ###### 2.3.1.1.1. `XChainBridge`
 
-Which bridge to create the `XChainClaimID` for.
+Which bridge to create the `XChainOwnedClaimID` for.
 
 ###### 2.3.1.1.2. `SignatureReward`
 
@@ -452,7 +452,7 @@ The account on the source chain that submitted the `XChainCommit` transaction th
 The public key used to verify the attestation signature.
 
 ###### 2.3.3.1.7. `Signature`
-The signature bearing witness to the event on the other chain.
+The signature attesting to the event on the other chain.
 
 ###### 2.3.3.1.8. `WasLockingChainSend`
 A boolean representing the chain where the event occurred.
@@ -465,7 +465,7 @@ The `XChainClaimID` associated with the transfer, which was included in the `XCh
 
 ##### 2.3.3.2. Implementation Details
 
-To add a witness to a `XChainClaimID`, that ledger object must already exist. If the `XChainCreateAccountClaimState` does not already exist, and the ordering number is greater than the current ordering number, it will be created.
+To add an attestation to a `XChainOwnedClaimID`, that ledger object must already exist. If the `XChainCreateAccountClaimState` does not already exist, and the ordering number is greater than the current ordering number, it will be created.
 
 #### 2.3.4. The **`XChainClaim`** transaction
 
@@ -473,7 +473,7 @@ The `XChainClaim` transaction allows the user to claim funds on the destination 
 
 This is normally not needed, but may be used to handle transaction failures or if the destination account was not specified in the `XChainCommit` transaction. It may only be used after a quorum of signatures have been sent from the witness servers.
 
-If the transaction succeeds in moving funds, the referenced `XChainClaimID` ledger object will be destroyed. This prevents transaction replay. If the transaction fails, the `XChainClaimID` will not be destroyed and the transaction may be re-run with different parameters.
+If the transaction succeeds in moving funds, the referenced `XChainOwnedClaimID` ledger object will be destroyed. This prevents transaction replay. If the transaction fails, the `XChainOwnedClaimID` will not be destroyed and the transaction may be re-run with different parameters.
 
 ##### 2.3.4.1. Fields
 
@@ -524,7 +524,7 @@ This transaction can only be used for XRP-XRP bridges.
 
 **IMPORTANT:** This transaction should only be enabled if the witness attestations will be reliably delivered to the destination chain. If the signatures are not delivered (for example, the chain relies on use accounts to collect signatures) then account creation will be blocked for all transactions that happened after the one waiting on attestations. This could be used maliciously. To disable this transaction on XRP-XRP bridges, the bridge's `MinAccountCreateAmount` should not be present.
 
-_Note:_ If this account already exists, the XRP is transferred to the existing account. However, note that unlike the `XChainCommit` transaction, there is no error handling mechanism. If the claim transaction fails, there is no mechanism for refunds (except manually, via the witness keys on the door accounts' signer list). The funds are essentially permanently lost. This transaction should therefore only be used for account creation.
+_Note:_ If this account already exists, the XRP is transferred to the existing account. However, note that unlike the `XChainCommit` transaction, there is no error handling mechanism. If the claim transaction fails, there is no mechanism for refunds (except manually, via the witness signing keys on the door accounts' signer list). The funds are essentially permanently lost. This transaction should therefore only be used for account creation.
 
 ##### 2.4.1.1. Fields
 
@@ -596,7 +596,7 @@ The account on the source chain that submitted the `XChainCreateAccountCommit` t
 The public key used to verify the signature.
 
 ###### 2.4.2.1.7. `Signature`
-The signature bearing witness to the event on the other chain.
+The signature attesting to the event on the other chain.
 
 ###### 2.4.2.1.8. `SignatureReward`
 The signature reward paid in the `XChainCreateAccountCommit` transaction.
@@ -700,11 +700,11 @@ The parameters for transaction submission on the locking chain.
 
 A boolean indicating whether or not the witness server should submit transactions on the locking chain.
 
-For the subscription model, the witness should not submit transactions.
+For the subscription model, the witness server should not submit transactions.
 
 **`SigningKeySeed`**
 
-The seed that the witness should use to sign its transactions on the locking chain. This is required if `ShouldSubmit` is `true`.
+The seed that the witness server should use to sign its transactions on the locking chain. This is required if `ShouldSubmit` is `true`.
 
 **`SigningKeyType`**
 
@@ -753,7 +753,7 @@ The location of the directory where the databases are stored.
 
 ##### 3.2.1.7. `SigningKeySeed`
 
-The seed that the witness should use to sign its attestations.
+The seed that the witness server should use to sign its attestations.
 
 ##### 3.2.1.8. `SigningKeyType`
 
@@ -761,7 +761,7 @@ The algorithm used to encode the `SigningKeySeed`. The options are `secp256k1` a
 
 ##### 3.2.1.9. `XChainBridge`
 
-The bridge that the witness is monitoring. This is identical to the `XChainBridge` params in every transaction and ledger object.
+The bridge that the witness server is monitoring. This is identical to the `XChainBridge` params in every transaction and ledger object.
 
 ### 3.3. Running a Witness Server
 
@@ -844,17 +844,17 @@ The signatures that the witness servers use must match the signatures on that do
 
 Normally, account sequence numbers prevent transaction replay on the XRP Ledger. However, this bridge design allows moving funds from an account via transactions not sent by that account. All the information to replay these transactions are publicly available. This section describes how the different transaction prevent certain attacks - including transaction replay attacks.
 
-To successfully run a `XChainClaim` transaction, the account sending the transaction must own the `XChainClaimID` ledger object referenced in the witness server's attestation. Since this claim ID is destroyed when the funds are successfully moved, the transaction cannot be replayed.
+To successfully run a `XChainClaim` transaction, the account sending the transaction must own the `XChainOwnedClaimID` ledger object referenced in the witness server's attestation. Since this claim ID is destroyed when the funds are successfully moved, the transaction cannot be replayed.
 
 To successfully create an account with the `XChainCreateAccountCommit` transaction, the ordering number must match the current order number on the bridge ledger object. After the transaction runs, the order number on the bridge ledger object is incremented. Since this number is incremented, the transaction can not be replayed since the order number in the transaction will never match again.
 
-Since the `XChainCommit` can contain an optional destination account on the destination chain, and the funds will move when the destination chain collects enough signatures, one attack would be for an account to watch for a `XChainCommit` to be sent and then send their own `XChainCommit` for a smaller amount. This attack doesn't steal funds, but it does result in the original sender losing their funds. To prevent this, when a `XChainClaimID` is created on the destination chain, the account that will send the `XChainCommit` on the source chain must be specified. Only the witnesses from this transaction will be accepted on the `XChainClaimID`.
+Since the `XChainCommit` can contain an optional destination account on the destination chain, and the funds will move when the destination chain collects enough signatures, one attack would be for an account to watch for a `XChainCommit` to be sent and then send their own `XChainCommit` for a smaller amount. This attack doesn't steal funds, but it does result in the original sender losing their funds. To prevent this, when a `XChainOwnedClaimID` is created on the destination chain, the account that will send the `XChainCommit` on the source chain must be specified. Only the attestations from this transaction will be accepted on the `XChainOwnedClaimID`.
 
 ### 5.3. Error Handling
 
 #### 5.3.1. Error Handling for Cross-Chain Transfers
 
-Error handling cross-chain transfers is straight forward. The `XChainClaimID` is only destroyed when a claim succeeds. If it fails for any reason - for example the destination account doesn't exist or has deposit auth set - then an explicit `XChainClaim` transaction may be submitted to redirect the funds.
+Error handling cross-chain transfers is straight forward. The `XChainOwnedClaimID` is only destroyed when a claim succeeds. If it fails for any reason - for example the destination account doesn't exist or has deposit auth set - then an explicit `XChainClaim` transaction may be submitted to redirect the funds.
 
 #### 5.3.2. Error Handling for Cross-Chain Account Creates
 
@@ -862,7 +862,7 @@ If a cross-chain account create fails, recovering the funds are outside the rule
 
 #### 5.3.3. Error Handling for Signature Reward Delivery
 
-If the signature reward cannot be delivered to the specified account, that portion of the signature reward is kept by the account the owns the `XChainClaimID`.
+If the signature reward cannot be delivered to the specified account, that portion of the signature reward is kept by the account that owns the `XChainOwnedClaimID`.
 
 
 # Appendix
