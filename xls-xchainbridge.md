@@ -1,9 +1,10 @@
 <pre>
 Title:       <b>Cross-Chain Bridge Support</b>
-Revision:    <b>1</b> (2023-02-14)
+Revision:    <b>1</b> (2023-02-17)
 
 Author:      <a href="mailto:mvadari@ripple.com">Mayukha Vadari</a>
              <a href="mailto:scott.determan@ripple.com">Scott Determan</a>
+
 Affiliation: <a href="https://ripple.com">Ripple</a>
 </pre>
 
@@ -11,75 +12,72 @@ Affiliation: <a href="https://ripple.com">Ripple</a>
 
 ## Abstract
 
-A bridge connects two ledgers: a locking-chain and an issuing-chain (also called a mainchain and a sidechain). Both are independent ledgers, with their own validators and they can have their own sets of custom transactions. Importantly, there is a way to move assets from the locking-chain to the issuing-chain and there is a way to return those assets from the issuing-chain to the locking-chain. This key operation is called a cross-chain transfer. A cross-chain transfer is not a single transaction. It happens on two chains, requires multiple transactions and involves an additional server type called a "witness". This key operation is described in a section below.
+A bridge connects two ledgers: a locking chain and an issuing chain (also called a mainchain and a sidechain). Both are independent ledgers, with their own validators. They can have their own custom transactions. Importantly, there is a way to move assets from the locking chain to the issuing chain and back: the bridge. This key operation is called a cross-chain transfer.  This proposal is not a single transaction. It happens on two chains, requires multiple transactions, and involves an additional server type called a "witness".
 
-A bridge does not exchange assets between two ledgers. Instead, it locks assets on one ledger (the "locking-chain") and represents those assets with wrapped assets on another chain (the "issuing-chain"). A good model to keep in mind is a box with in infinite supply of wrapped assets. Putting an asset from the locking chain into the box will release a wrapped asset onto the issuing chain. Putting a wrapped asset from the issuing chain back into the box will release one of the exiting locking-chain assets back onto the locking chain. There is no other way to get assets into or out of the box. Note that there is no way for the box to "run out of" wrapped assets - it has an infinite supply.
+A bridge does not exchange assets between two ledgers. Instead, it locks assets on one ledger (the "locking chain") and represents those assets with wrapped assets on another chain (the "issuing chain"). A good model to keep in mind is a box with in infinite supply of wrapped assets. Putting an asset from the locking chain into the box will release a wrapped asset onto the issuing chain. Putting a wrapped asset from the issuing chain back into the box will release one of the existing locking chain assets back onto the locking chain. There is no other way to get assets into or out of the box. Note that there is no way for the box to "run out of" wrapped assets - it has an infinite supply.
 
 ## 1. Introduction
 
 ### 1.1. Terminology
 
 -   **Bridge**: A method of moving assets from one blockchain to another.
--   **Witness server**: A server that listens for transactions on one or both of the chains and signs attestations used to prove that certain events happened on a chain.
--   **Cross-chain transfer**: A protocol that moves assets from the locking-chain to the issuing-chain, or returns those assets from the issuing-chain back to the locking-chain.
+-   **Locking chain**: The chain on which the the assets originate. On this chain, the bridge locks and unlocks assets.
+-   **Issuing chain**: The chain where the assets from the locking chain are wrapped. On this chain, the bridge mints and burns assets.
+-   **Cross-chain transfer**: A protocol that moves assets from the locking chain to the issuing chain, or returns those assets from the issuing chain back to the locking chain. This generally means that the locking chain locks and unlocks a token, while the issuing chain mints and burns a wrapped version of that token. Usually (but not always), the mainchain will be locking and unlocking a token, and the sidechain will be minting and burning the wrapped version.
 -   **Source chain**: The chain that a cross-chain transfer begins from. The transfer is from the source chain and to the destination chain.
 -   **Destination chain**: The chain that a cross-chain transfer ends at. The transfer is from the source chain and to the destination chain.
--   **Locking chain**: The chain where the assets originate and are put into trust.
--   **Issuing chain**: The chain where the assets from the locking-chain are wrapped.
 -   **Door account**: The account on the locking chain that is used to put assets into trust, or the account on the issuing chain used to issue wrapped assets. The name comes from the idea that a door is used to move from one room to another and a door account is used to move assets from one chain to another.
-- **Cross-chain claim ID**: A ledger object used to prove ownership of the funds moved in a cross-chain transfer.
-- **Attestation**: A message signed by a witness server attesting to a particular event that happened on the other chain (such as an account sending an asset to the door account using a particular claim ID).
+- **Attestation**: A message signed by a witness server attesting to a particular event that happened on the other chain. This is used because chains don't talk to each other directly.
+-   **Witness server**: A new piece of the puzzle. It is the only part of the system that knows about both of the chains that are a part of the bridge, and coordinates the transfers between them.
+- **Cross-chain claim ID**: A ledger object used to prove ownership of the funds moved in a cross-chain transfer. This object represents a unique ID for each cross-chain transfer.
 
-### 1.2 The Witness Server
+### 1.2. The Witness Server
 
-A witness server is an independent server that helps provide proof that some event happened on either the locking-chain or the issuing-chain. When they detect an event of interest, they use the `XChainAddClaimAttestation` transaction to add their attestation that the event happened. When a quorum of signatures are collected on the ledger, the transaction predicated on that event happening is unlocked (and may be triggered automatically when the quorum of signatures is reached). Witness servers are independent from the servers that run the chains themselves.
+A witness server is an independent server that helps provide proof that an event happened on either the locking chain or the issuing chain. It listens to transactions on one side of the bridge and submits attestations on the other side. This helps affirm that a transaction on the source chain occurred. They are acting as an oracle, providing information to help prove that the value was locked/burned on the source chain. This allows the recipient to then claim the equivalent funds on the destination chain.
 
-Since submitting a signature requires submitting a transaction and paying a fee, supporting rewards for signatures is an important requirement. Of course, the reward can be higher than the fee, providing an incentive for running a witness server.
+Since submitting a signature requires submitting a transaction and paying a fee, supporting rewards for signatures is an important requirement. The reward could be higher than the fee, providing an incentive for running a witness server.
 
 ### 1.3. Design Overview
 
 This design proposes: 1 new server type, 3 new ledger objects, and 8 new transactions.
 
-The new ledger objects are: 
+The new server type is:
+* The witness server
 
-- Bridge
-- XChainOwnedClaimID
-- XChainOwnedCreateAccountClaimID
+The new ledger objects are:
+* `Bridge`
+* `XChainOwnedClaimID`
+* `XChainOwnedCreateAccountClaimID`
 
 The new transactions are:
-
-- XChainCreateBridge
-- XChainModifyBridge
-- XChainCreateClaimID
-- XChainCommit
-- XChainClaim
-- XChainAddClaimAttestation
-- XChainAddAccountCreateAttestation
-- XChainAccountCreateCommit
-
-The new server type is:
-
-- Witness server
-
-These new entities are described in detail later in this document.
+* `XChainCreateBridge`
+* `XChainModifyBridge`
+* `XChainCreateClaimID`
+* `XChainCommit`
+* `XChainAddClaimAttestation`
+* `XChainClaim`
+* `XChainAccountCreateCommit`
+* `XChainAddAccountCreateAttestation`
 
 #### 1.3.1. A Cross-Chain Transfer
 
-A cross-chain transfer moves assets from the locking-chain to the issuing-chain or returns those assets from the issuing-chain back to the locking-chain. Cross-chain transfers need a couple primitives:
+##### 1.3.1.1. Primitives
 
-1) Put assets into trust on the locking-chain.
+A cross-chain transfer moves assets from the locking chain to the issuing chain, or returns those assets from the issuing chain back to the locking chain. These transfers need some primitives:
 
-2) Issue wrapped assets on the issuing-chain.
+1. Put assets into trust (lock assets) on the locking chain.
 
-3) Return or destroy the wrapped assets on the issuing-chain.
+2. Issue or mint wrapped assets on the issuing chain.
 
-4) On the issuing-chain, prove that assets were put into trust on the locking-chain.
+3. Return or burn the wrapped assets on the issuing chain.
 
-5) On the locking-chain, prove that assets were returned or destroyed on the issuing-chain.
+4. On the issuing chain, prove that assets were put into trust on the locking chain.
 
-6) A way to prevent assets from being wrapped multiple times (prevent transaction replay). The proofs that certain events happened on the different chains are public and can be submitted multiple times. This must only be able to wrap or unlock assets once.
+5. On the locking chain, prove that assets were returned or burned on the issuing chain.
 
-In this implementation, a regular XRP ledger account is used to put assets into trust on the locking-chain, and a regular XRP ledger account is used to issue assets on the issuing-chain. These accounts will have their master keys disabled and funds will move from these accounts through a new set of transactions specifically meant for cross-chain transfers. A special set of "witness servers" are used to prove that assets were put into trust on the locking-chain or returned on the issuing-chain. A new ledger object called a "xchain claim id" is used to prevent transaction replay.
+6. A way to prevent the same assets from being wrapped multiple times (to prevent the double spend problem via transaction replay). The proofs that certain events happened on the different chains are public and can therefore theoretically be submitted multiple times. This must only be valid once to wrap or unlock assets.
+
+##### 1.3.1.2. Process
 
 In this scenario, a user is trying to transfer funds from their account on the source chain to their account on the destination chain.
 
@@ -615,14 +613,14 @@ The bridge associated with the attestation.
 
 ##### 2.4.2.2. Implementation Details
 
-Since `XChainCreateAccountClaimState` is ordered, the witness servers are designed to always delvier attestations in order, and this object should not collect a quorum of attestions but not be able to execute yet. However, if this situation should occur (via a buggy attestation server, for example) then the object will not execute yet and another
-attestation will need to be sent to the object in order to execute it. It's OK to send an attestation that is already on the object.
+Since `XChainCreateAccountClaimState` is ordered, it's possible for this object to collect a quorum of signatures but not be able to execute yet. As a result, the witness servers are designed to always deliver attestations in order, and therefore this object should not in practice be able to collect a quorum of attestations but not be able to execute yet.
+However, if this situation should occur (e.g. via a buggy witness server), then the object will not execute yet and another attestation will need to be sent to the object in order to execute it. In this case, it's okay to send an attestation that is already on the object.
 
 ## 3. The Witness Server
 
-A witness server helps provide proof that some event happened on either the locking-chain or the issuing-chain. It does not validate transactions, or corrdinate with other witness servers. Instead it subscribes to a transaction stream from the chains. When they detect an event of interest, they create an attestation (a signed message) and use the `XChainAddClaimAttestation` transaction or the `XChainAddAccountCreateAttestation` to add their attestation that the event happened. When a quorum of signatures are collected on the ledger, the transaction predicated on that event happening is unlocked (and may be triggered automatically when the quorum of signatures is reached).
+A witness server helps provide proof that some event happened on either the locking chain or the issuing chain. It does not validate transactions and does not need to coordinate with other witness servers. Instead, it listens to transactions from the chains. When it detects an event of interest on the source chain, it creates an attestation (a signed message) and uses the `XChainAddClaimAttestation` or `XChainAddAccountCreateAttestation` transactions to submit their attestation for the event to the destination chain. When a quorum of signatures are collected on the destination chain, the funds are released.
 
-Since submitting a signature requires submitting a transaction and paying a fee, supporting rewards for signatures is an important requirement. Of course, the reward can be higher than the fee, providing an incentive for running a witness server.
+Since submitting a signature requires submitting a transaction and paying a fee, supporting rewards for signatures is an important requirement. The reward could be higher than the fee, providing an incentive for running a witness server.
 
 It is possible for a witness server to provide attestations for one chain only - and it is possible for the door account on the locking chain to have a different signer's list than the door account on the issuing chain. The initial implementation of the witness server assumes it is providing attestation for both chains, however it is desirable to allow witness servers that only know about one of the chains.
 
@@ -636,7 +634,7 @@ _Note:_ since submitting a signature requires submitting a transaction and payin
 
 ### 3.1. The Server Code
 
-The witness server code is currently available [here](https://github.com/seelabs/xbridge_witness). However, the official repo will likely move if this proposal is accepted.
+The witness server code is currently available [here](https://github.com/seelabs/xbridge_witness). However, the official repo will likely move to the XRPLF Github org if this proposal is accepted.
 
 ### 3.2. Witness Configuration
 
@@ -774,11 +772,11 @@ After downloading and building the code, run:
 
 Further details are available in the README of the [repo](https://github.com/seelabs/xbridge_witness).
 
-#### 3.3.1 Server Specs
+#### 3.3.1. Server Specs
 
 The witness server is pretty lightweight, so it likely doesn't need very high specs. However, this has not been tested.
 
-#### 3.3.2 Best Practices
+#### 3.3.2. Best Practices
 
 In a production environment, a witness server should use different keys for signing attestations, signing locking chain transactions, and signing issuing chain transactions, to avoid transaction replay attack issues.
 
@@ -871,7 +869,13 @@ If the signature reward cannot be delivered to the specified account, that porti
 
 ## Appendix A: Alternate Account Create Design: Undeleteable Accounts
 
-In a normal cross-chain transaction, the claim ID are used to prevent transaction replay. However, the account create deisgn does not use claim IDs. Instead, it requires that accounts be created in the same order as the "commit" transactions. There is another way to prevent transaction replay - check if the account to be created already exists. If it does, reject the transaction. The only problem with this is accounts on the XRP ledger are deletable, and an easy attack would be to delete the account and replay the transaction. To prevent this, a design was considered where accounts created through cross-chain "account create" transactions would be undeletable. This has the nice property that the attestations no longer need to be added in order. However, it also introduces a new property on account roots that interacts with existing functionality. In the end, this deisgn chose to persue the "execution ordering" stragegy. However, undeletable account is a viable solution with a different set of tradeoffs.
+In a normal cross-chain transfer, the claim ID is used to prevent transaction replay. However, the account create design does not use claim IDs. Instead, it requires that accounts be created in the same order as the "commit" transactions.
+
+There is another way to prevent transaction replay - check if the account to be created already exists. If it does, reject the transaction. The only problem with this is accounts on the XRP ledger are deletable, and an easy attack would be to delete the account and replay the transaction.
+
+To prevent this, a design was considered where accounts created through cross-chain "account create" transactions would be undeletable. This has the nice property that the attestations no longer need to be added in order. However, it also introduces a new property on `AccountRoot`s that interacts with existing functionality.
+
+In the end, this design chose to pursue the "execution ordering" strategy. However, the undeletable account strategy is a viable solution with a different set of tradeoffs.
 
 ## Appendix B: Extensions
 
@@ -887,5 +891,4 @@ The main disadvantage of this design is the complexity in the federators. In ord
 
 In addition, handing fee escalation, failed transactions, and servers falling behind was much more complex.
 
-Finally, because all the transactions were submitted from the same account (the door account) this presented a challenge for transaction throughput as the XRP ledger limits the number of transactions an account can submit in a single ledger.
-
+Finally, because all the transactions were submitted from the same account (the door account), this presented a challenge for transaction throughput as the XRP ledger limits the number of transactions an account can submit in a single ledger.
