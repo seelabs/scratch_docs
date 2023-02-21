@@ -1,6 +1,6 @@
 <pre>
 Title:       <b>Cross-Chain Bridge Support</b>
-Revision:    <b>1</b> (2023-02-17)
+Revision:    <b>1</b> (2023-02-21)
 
 Author:      <a href="mailto:mvadari@ripple.com">Mayukha Vadari</a>
              <a href="mailto:scott.determan@ripple.com">Scott Determan</a>
@@ -14,15 +14,15 @@ Affiliation: <a href="https://ripple.com">Ripple</a>
 
 A bridge connects two ledgers: a locking chain and an issuing chain (also called a mainchain and a sidechain). Both are independent ledgers, with their own validators. They can have their own custom transactions. Importantly, there is a way to move assets from the locking chain to the issuing chain and back: the bridge. This key operation is called a cross-chain transfer.  This proposal is not a single transaction. It happens on two chains, requires multiple transactions, and involves an additional server type called a "witness".
 
-A bridge does not exchange assets between two ledgers. Instead, it locks assets on one ledger (the "locking chain") and represents those assets with wrapped assets on another chain (the "issuing chain"). A good model to keep in mind is a box with in infinite supply of wrapped assets. Putting an asset from the locking chain into the box will release a wrapped asset onto the issuing chain. Putting a wrapped asset from the issuing chain back into the box will release one of the existing locking chain assets back onto the locking chain. There is no other way to get assets into or out of the box. Note that there is no way for the box to "run out of" wrapped assets - it has an infinite supply.
+A bridge does not exchange assets between two ledgers. Instead, it locks assets on one ledger (the "locking chain") and represents those assets with wrapped assets on another chain (the "issuing chain"). A good model to keep in mind is a box with an infinite supply of wrapped assets. Putting an asset from the locking chain into the box will release a wrapped asset onto the issuing chain. Putting a wrapped asset from the issuing chain back into the box will release one of the existing locking chain assets back onto the locking chain. There is no other way to get assets into or out of the box. Note that there is no way for the box to "run out of" wrapped assets - it has an infinite supply.
 
 ## 1. Introduction
 
 ### 1.1. Terminology
 
 -   **Bridge**: A method of moving assets from one blockchain to another.
--   **Locking chain**: The chain on which the the assets originate. On this chain, the bridge locks and unlocks assets.
--   **Issuing chain**: The chain where the assets from the locking chain are wrapped. On this chain, the bridge mints and burns assets.
+-   **Locking chain**: The chain on which the assets originate. On this chain, the bridge locks and unlocks assets.
+-   **Issuing chain**: The chain on which the assets from the locking chain are wrapped. On this chain, the bridge mints and burns assets.
 -   **Cross-chain transfer**: A protocol that moves assets from the locking chain to the issuing chain, or returns those assets from the issuing chain back to the locking chain. This generally means that the locking chain locks and unlocks a token, while the issuing chain mints and burns a wrapped version of that token. Usually (but not always), the mainchain will be locking and unlocking a token, and the sidechain will be minting and burning the wrapped version.
 -   **Source chain**: The chain that a cross-chain transfer begins from. The transfer is from the source chain and to the destination chain.
 -   **Destination chain**: The chain that a cross-chain transfer ends at. The transfer is from the source chain and to the destination chain.
@@ -33,7 +33,7 @@ A bridge does not exchange assets between two ledgers. Instead, it locks assets 
 
 ### 1.2. The Witness Server
 
-A witness server is an independent server that helps provide proof that an event happened on either the locking chain or the issuing chain. It listens to transactions on one side of the bridge and submits attestations on the other side. This helps affirm that a transaction on the source chain occurred. They are acting as an oracle, providing information to help prove that the value was locked/burned on the source chain. This allows the recipient to then claim the equivalent funds on the destination chain.
+A witness server is an independent server that helps provide proof that an event happened on either the locking chain or the issuing chain. It listens to transactions on one side of the bridge and submits attestations on the other side. This helps affirm that a transaction on the source chain occurred. The witness server is acting as an oracle, providing information to help prove that the assets were locked/burned on the source chain. This then allows the recipient of those assets to claim the equivalent funds on the destination chain.
 
 Since submitting a signature requires submitting a transaction and paying a fee, supporting rewards for signatures is an important requirement. The reward could be higher than the fee, providing an incentive for running a witness server.
 
@@ -75,7 +75,7 @@ A cross-chain transfer moves assets from the locking chain to the issuing chain,
 
 5. On the locking chain, prove that assets were returned or burned on the issuing chain.
 
-6. A way to prevent the same assets from being wrapped multiple times (to prevent the double spend problem via transaction replay). The proofs that certain events happened on the different chains are public and can therefore theoretically be submitted multiple times. This must only be valid once to wrap or unlock assets.
+6. A way to prevent the same assets from being wrapped multiple times (to prevent the double spend problem via transaction replay). The proofs that certain events happened on the different chains are public and can therefore theoretically be submitted multiple times. This must be valid only once to wrap or unlock assets.
 
 ##### 1.3.1.2. Process
 
@@ -122,7 +122,7 @@ We propose three new objects:
 The **`Bridge`** object represents one end of a cross-chain bridge and holds data associated with the cross-chain bridge. Bridges are created using the **`XChainCreateBridge`** transaction.
 
 The ledger object is owned by the door account and defines the bridge parameters. It is created with a `XChainCreateBridge` transaction, and modified with a `XChainModifyBridge`
-transaction (only the `MinAccountCreateAmount` and `SignaturesReward` may be changed). It cannot be deleted.
+transaction (only the `MinAccountCreateAmount` and `SignaturesReward` may be changed). It cannot be deleted. A door account may not own more than one `Bridge` object.
 
 _Note:_ The signatures used to attest to chain events are on the `XChainOwnedClaimID` and `XChainOwnedAccountCreateClaimID` ledger objects, not on this ledger object. 
 
@@ -168,20 +168,20 @@ The asset that is locked and unlocked on the locking chain.
 
 **`IssuingChainDoor`**
 
-The door account on the issuing chain. For an XRP-XRP bridge, this must be the genesis account (the account that is created when the network is first started, which contains all of the XRP).
+The door account on the issuing chain. For a XRP-XRP bridge, this must be the genesis account (the account that is created when the network is first started, which contains all of the XRP).
 
 **`IssuingChainIssue`**
 
 The asset that is minted and burned on the issuing chain. For an IOU-IOU bridge, the issuer of the asset must be the door account on the issuing chain, to avoid supply issues.
 
 ###### 2.1.1.1.3. `SignatureReward`
-The total amount, in XRP, to be rewarded for providing a signatures for a cross-chain transfer or for signing for the cross-chain reward. This will be split among the signers.
+The total amount, in XRP, to be rewarded for providing a signature for a cross-chain transfer or for signing for the cross-chain reward. This will be split among the signers.
 
 ###### 2.1.1.1.4. `MinAccountCreateAmount`
 The minimum amount, in XRP, required for a `XChainCreateAccountCommit` transaction. If this is not present, the `XChainCreateAccountCommit` transaction will fail. This field can only be present on XRP-XRP bridges.
 
 ###### 2.1.1.1.5. `XChainAccountClaimCount`
-A counter used to order the execution of account create transactions. It is incremented every time a `XChainAccountCreateCommit` transaction is "claimed" on the destination chain. When the "claim" transaction is run on the destination chain, the `XChainAccountClaimCount` must match the value that the `XChainAccountCreateCount` had at the time the `XChainAccountClaimCount` was run on the source chain. This orders the claims to run in the same order that the `XChainAccountCreateCommit` transactions ran on the source chain and prevents transaction replay.
+A counter used to order the execution of account create transactions. It is incremented every time a `XChainAccountCreateCommit` transaction is "claimed" on the destination chain. When the "claim" transaction is run on the destination chain, the `XChainAccountClaimCount` must match the value that the `XChainAccountCreateCount` had at the time the `XChainAccountClaimCount` was run on the source chain. This orders the claims so that they run in the same order that the `XChainAccountCreateCommit` transactions ran on the source chain, to prevent transaction replay.
 
 ###### 2.1.1.1.6. `XChainAccountCreateCount`
 A counter used to order the execution of account create transactions. It is incremented every time a successful `XChainAccountCreateCommit` transaction is run for the source chain.
@@ -191,9 +191,9 @@ The value of the next `XChainClaimID` to be created.
 
 #### 2.1.2. The **`XChainOwnedClaimID`** object
 
-The `XChainOwnedClaimID` ledger object must be acquired on the destination before submitting a `XChainCommit` on the source chain. Its purpose is to prevent transaction replay attacks and is also used as a place to collect attestations from witness servers. 
+The `XChainOwnedClaimID` ledger object represents a unique ID for each cross-chain transfer. It must be acquired on the destination chain before submitting a `XChainCommit` on the source chain. Its purpose is to prevent transaction replay attacks and is also used as a place to collect attestations from witness servers. 
 
-A `XChainCreateClaimID` transaction is used to create a new `XChainOwnedClaimID`. It is destroyed when the funds are successfully claimed on the destination chain.
+A `XChainCreateClaimID` transaction is used to create a new `XChainOwnedClaimID`. The ledger object is destroyed when the funds are successfully claimed on the destination chain.
 
 ##### 2.1.2.1. Fields
 
@@ -218,7 +218,7 @@ Which bridge the `XChainClaimID` correlates to.
 
 ###### 2.1.2.1.3. `OtherChainSource`
 
-The account that must send the corresponding `XChainCommit` on the source chain. Since the destination may be specified in the `XChainCommit` transaction, if the `SourceAccount` wasn't specified another account to try to specify a different destination and steal the funds. This also allows tracking only a single set of signatures, since we know which account will send the `XChainCommit` transaction.
+The account that must send the corresponding `XChainCommit` on the source chain. The destination may be specified in the `XChainCommit` transaction, which means that if the `OtherChainSource` isn't specified, another account can try to specify a different destination and steal the funds. This also allows tracking only a single set of signatures, since we know which account will send the `XChainCommit` transaction.
 
 ###### 2.1.2.1.4. `SignatureReward`
 
@@ -236,8 +236,8 @@ The unique sequence number for a cross-chain transfer.
 
 #### 2.1.3. The **`XChainOwnedCreateAccountClaimID`** object
 
-The `XChainOwnedCreateAccountClaimID` ledger object is used to collect signatures for creating an account via a cross-chain transfer. It is created when an `XChainAddAccountCreateAttestation` transaction adds a signature attesting to a `XChainAccountCreateCommit` transaction and the
-`XChainAccountCreateCount` is greater than or equal to the current `XChainAccountClaimCount` on the `Bridge` ledger object.
+The `XChainOwnedCreateAccountClaimID` ledger object is used to collect signatures for creating an account via a cross-chain transfer. It is created when a `XChainAddAccountCreateAttestation` transaction adds a signature attesting to a `XChainAccountCreateCommit` transaction and the
+`XChainAccountCreateCount` is greater than or equal to the current `XChainAccountClaimCount` on the `Bridge` ledger object. It is destroyed when all the attestations have been received and the funds have transferred to the new account.
 
 ##### 2.1.3.1. Fields
 
@@ -338,8 +338,8 @@ Specifies the flags for this transaction. In addition to the universal transacti
 
 #### 2.3.1. The **`XChainCreateClaimID`** transaction
 
-The `XChainCreateClaimID` transaction is the first step in a cross-chain transfer. The claim ID must be created on the destination chain before the `XChainCommit` transaction (which must reference this number) can be sent on the source chain. The account that will send the `XChainCommit` on the source chain must be specified in this transaction (see note on the `SourceAccount` field in the `XChainOwnedClaimID` ledger object for
-justification). The actual sequence number must be retrieved from a validated ledger.
+The `XChainCreateClaimID` transaction is the first step in a cross-chain transfer. The claim ID must be created on the destination chain before the `XChainCommit` transaction (which must reference this number) can be sent on the source chain. The account that will send the `XChainCommit` on the source chain must be specified in this transaction (see note on the `OtherChainSource` field in the `XChainOwnedClaimID` ledger object for
+justification). The actual claim ID must be retrieved from a validated ledger.
 
 ##### 2.3.1.1. Fields
 
@@ -365,11 +365,13 @@ This could be optional, but it is required so the sender can be made positively 
 
 The account that must send the `XChainCommit` transaction on the source chain. 
 
-Since the destination may be specified in the `XChainCommit` transaction, if the `SourceAccount` wasn't specified, another account could try to specify a different destination and steal the funds.
+Since the destination may be specified in the `XChainCommit` transaction, if the `OtherChainSource` wasn't specified, another account could try to specify a different destination and steal the funds.
 
 This also allows us to limit the number of attestations that would be considered valid, since we know which account will send the `XChainCommit` transaction.
 
 #### 2.3.2. The **`XChainCommit`** transaction
+
+The `XChainCommit` transaction is the second step in a cross-chain transfer. It puts assets into trust on the locking chain so that they may be wrapped on the issuing chain, or burns wrapped assets on the issuing chain so that they may be returned on the locking chain.
 
 ##### 2.3.2.1. Fields
 
@@ -398,7 +400,7 @@ If an incorrect sequence number is specified, the funds will be lost.
 
 The asset to commit, and the quantity. 
 
-This must match the door account's `LockingChainIssue` (if on the locking chain) or the door accounts's `IssuingChainIssue` (if on the issuing chain).
+This must match the door account's `LockingChainIssue` (if on the locking chain) or the door account's `IssuingChainIssue` (if on the issuing chain).
 
 ###### 2.3.2.1.4. `OtherChainDestination`
 
@@ -408,7 +410,7 @@ If this is not specified, the account that submitted the `XChainCreateClaimID` t
 
 #### 2.3.3. The **`XChainAddClaimAttestation`** transaction
 
-The `XChainAddClaimAttestation` transaction provides an attestation from a witness server attesting to an `XChainCommit` transaction on the other chain.
+The `XChainAddClaimAttestation` transaction provides an attestation from a witness server attesting to a `XChainCommit` transaction on the other chain.
 
 The signature must be from one of the keys on the door's signer list at the time the signature was provided. However, if the signature list changes between the time the signature was submitted and the quorum is reached, the new signature set is used and some of the currently collected signatures may be removed. Note that the reward is only sent to accounts that have keys on the current list.
 
@@ -465,7 +467,7 @@ The `XChainClaimID` associated with the transfer, which was included in the `XCh
 
 ##### 2.3.3.2. Implementation Details
 
-To add an attestation to a `XChainOwnedClaimID`, that ledger object must already exist. If the `XChainCreateAccountClaimState` does not already exist, and the ordering number is greater than the current ordering number, it will be created.
+To add an attestation to a `XChainOwnedClaimID`, that ledger object must already exist.
 
 #### 2.3.4. The **`XChainClaim`** transaction
 
@@ -511,8 +513,7 @@ This must match the amount attested to on the attestations associated with this 
 
 ### 2.4. Transactions for Account Creation
 
-Explain why you need a special transaction for account creation
-Cross-chain transfers require an account to already exist on the destination chain, but this isn't possible with a sidechain
+Since the cross-chain transfer process requires an existing account on the destination chain, if the user does not have an account on the destination chain, they have no way to transfer funds. With a sidechain, there are no user accounts when the chain is first created. Therefore, account creation requires a special mechanism and special transactions.
 
 #### 2.4.1. The **`XChainCreateAccountCommit`** transaction
 
@@ -522,7 +523,7 @@ A normal cross-chain transfer requires a `XChainClaimID` (which requires an exis
 
 This transaction can only be used for XRP-XRP bridges.
 
-**IMPORTANT:** This transaction should only be enabled if the witness attestations will be reliably delivered to the destination chain. If the signatures are not delivered (for example, the chain relies on use accounts to collect signatures) then account creation will be blocked for all transactions that happened after the one waiting on attestations. This could be used maliciously. To disable this transaction on XRP-XRP bridges, the bridge's `MinAccountCreateAmount` should not be present.
+**IMPORTANT:** This transaction should only be enabled if the witness attestations will be reliably delivered to the destination chain. If the signatures are not delivered, then account creation will be blocked until the one waiting on attestations receives its attestations. This could be used maliciously. To disable this transaction on XRP-XRP bridges, the bridge's `MinAccountCreateAmount` should not be present.
 
 _Note:_ If this account already exists, the XRP is transferred to the existing account. However, note that unlike the `XChainCommit` transaction, there is no error handling mechanism. If the claim transaction fails, there is no mechanism for refunds (except manually, via the witness signing keys on the door accounts' signer list). The funds are essentially permanently lost. This transaction should therefore only be used for account creation.
 
@@ -605,7 +606,7 @@ The signature reward paid in the `XChainCreateAccountCommit` transaction.
 A boolean representing the chain where the event occurred.
 
 ###### 2.4.2.1.10. `XChainAccountCreateCount`
-The counter representing the order that the claims must be processed in.
+The counter that represents the order that the claims must be processed in.
 
 ###### 2.4.2.1.11. `XChainBridge`
 The bridge associated with the attestation.
@@ -613,8 +614,8 @@ The bridge associated with the attestation.
 
 ##### 2.4.2.2. Implementation Details
 
-Since `XChainCreateAccountClaimState` is ordered, it's possible for this object to collect a quorum of signatures but not be able to execute yet. As a result, the witness servers are designed to always deliver attestations in order, and therefore this object should not in practice be able to collect a quorum of attestations but not be able to execute yet.
-However, if this situation should occur (e.g. via a buggy witness server), then the object will not execute yet and another attestation will need to be sent to the object in order to execute it. In this case, it's okay to send an attestation that is already on the object.
+Since `XChainOwnedCreateAccountClaimID` is ordered, it's possible for this object to collect a quorum of signatures but not be able to execute yet. As a result, the witness servers are designed to always deliver attestations in order. Therefore, in practice, this object should not be able to collect a quorum of attestations without being able to execute yet.
+However, if this situation should occur (e.g. via a buggy witness server), then the object will not execute yet and another attestation will need to be sent to the object in order to execute it. In this case, it is okay to send an attestation that is already on the object.
 
 ## 3. The Witness Server
 
@@ -778,13 +779,13 @@ The witness server is pretty lightweight, so it likely doesn't need very high sp
 
 #### 3.3.2. Best Practices
 
-In a production environment, a witness server should use different keys for signing attestations, signing locking chain transactions, and signing issuing chain transactions, to avoid transaction replay attack issues.
+In a production environment, a witness server should use different keys for each of signing attestations, signing locking chain transactions, and signing issuing chain transactions. This adds security and helps avoid transaction replay attack issues.
 
 ## 4. How to Build a Bridge
 
-### 4.1. Setting Up a New Sidechain (AKA Building an XRP-XRP Bridge)
+### 4.1. Setting Up a New Sidechain (AKA Building a XRP-XRP Bridge)
 
-Setting up a new issuing chain with an XRP-XRP bridge is somewhat complex, because there are no accounts on the issuing chain, even for witnesses. As a result, witnesses cannot directly submit `XChainAddClaimAttestation` or `XChainAddAccountCreateAttestation` transactions.
+Setting up a new issuing chain with a XRP-XRP bridge is somewhat complex, because there are no accounts on the issuing chain, even for witnesses. As a result, witnesses cannot directly submit `XChainAddClaimAttestation` or `XChainAddAccountCreateAttestation` transactions.
 
 Once the new network is set up and active (in other words, the validators are running and are successfully closing ledgers):
 
@@ -806,7 +807,7 @@ The bridge is now set up and can be used normally.
 
 ### 4.2. Building an IOU-IOU Bridge
 
-Any two networks that have an IOU-IOU bridge between them should already have an XRP-XRP bridge between them, as a sidechain will need XRP for account reserves and transaction fees (while this _could_ be changed, in that case the `XChainBridge` amendment code could also be modified). This makes it simpler to set up an IOU-IOU bridge.
+Any two networks that have an IOU-IOU bridge between them should already have a XRP-XRP bridge between them, as a sidechain will need XRP for account reserves and transaction fees (while this _could_ be changed, in that case the `XChainBridge` amendment code could also be modified). This makes it simpler to set up an IOU-IOU bridge.
 
 To set up an IOU-IOU bridge:
 
@@ -834,17 +835,15 @@ The signatures that the witness servers use must match the signatures on that do
 
 1.  The bridge signers list can be used to move funds from the account. Putting this list on the door account emphasizes this trust model.
     
-2.  It allows for emergency action. If something goes very, very wrong, funds could still be moved if the entities on the signer list sign a regular transaction.
+2.  It allows for emergency action. If something goes very, very wrong, funds could still be moved if the entities on the signer list sign a regular `Payment` transaction.
     
-3.  If the door account has multiple bridges, a strange use-case, but one that is currently supported. If the bridges share a common asset type, the trust model is the union of the signer's list. Keeping the signer's list on the account makes this explicit.
-    
-4.  It's a more natural way to modify bridge parameters.
+3.  It's a more natural way to modify bridge parameters.
 
 ### 5.2. Transaction Replay Attacks
 
-Normally, account sequence numbers prevent transaction replay on the XRP Ledger. However, this bridge design allows moving funds from an account via transactions not sent by that account. All the information to replay these transactions are publicly available. This section describes how the different transaction prevent certain attacks - including transaction replay attacks.
+Normally, account sequence numbers prevent transaction replay on the XRP Ledger. However, this bridge design allows funds to move from an account via transactions not sent by that account (namely, the attestations submitted by the witness servers). All the information to replay these transactions are publicly available. This section describes how the different transactions prevent certain attacks - including transaction replay attacks.
 
-To successfully run a `XChainClaim` transaction, the account sending the transaction must own the `XChainOwnedClaimID` ledger object referenced in the witness server's attestation. Since this claim ID is destroyed when the funds are successfully moved, the transaction cannot be replayed.
+To successfully run a `XChainClaim` transaction, the account sending the transaction must own the `XChainOwnedClaimID` ledger object referenced in the witness server's attestation. Since this ledger object is destroyed when the funds are successfully moved, the transaction cannot be replayed.
 
 To successfully create an account with the `XChainCreateAccountCommit` transaction, the ordering number must match the current order number on the bridge ledger object. After the transaction runs, the order number on the bridge ledger object is incremented. Since this number is incremented, the transaction can not be replayed since the order number in the transaction will never match again.
 
@@ -854,11 +853,11 @@ Since the `XChainCommit` can contain an optional destination account on the dest
 
 #### 5.3.1. Error Handling for Cross-Chain Transfers
 
-Error handling cross-chain transfers is straight forward. The `XChainOwnedClaimID` is only destroyed when a claim succeeds. If it fails for any reason - for example the destination account doesn't exist or has deposit auth set - then an explicit `XChainClaim` transaction may be submitted to redirect the funds.
+Error handling for cross-chain transfers is straightforward. The `XChainOwnedClaimID` is only destroyed when a claim succeeds. If it fails for any reason (for example, if the destination account doesn't exist or has deposit auth set), then an explicit `XChainClaim` transaction may be submitted to redirect the funds.
 
 #### 5.3.2. Error Handling for Cross-Chain Account Creates
 
-If a cross-chain account create fails, recovering the funds are outside the rules of the bridge system. Assume the funds are lost, the only way to recover them would be if the witness servers created a transaction themselves. But this is unlikely to happen and should not be relied upon. The `MinAccountCreateAmount` on the `Bridge` object is meant to prevent these transactions from failing. 
+If a cross-chain account create fails, the recovery of funds must happen outside the rules of the bridge system. The only way to recover them would be if the witness servers created a `Payment` transaction themselves. This is unlikely to happen and should not be relied upon. The `MinAccountCreateAmount` on the `Bridge` object is meant to prevent these transactions from failing due to having too little XRP.
 
 #### 5.3.3. Error Handling for Signature Reward Delivery
 
@@ -871,11 +870,11 @@ If the signature reward cannot be delivered to the specified account, that porti
 
 In a normal cross-chain transfer, the claim ID is used to prevent transaction replay. However, the account create design does not use claim IDs. Instead, it requires that accounts be created in the same order as the "commit" transactions.
 
-There is another way to prevent transaction replay - check if the account to be created already exists. If it does, reject the transaction. The only problem with this is accounts on the XRP ledger are deletable, and an easy attack would be to delete the account and replay the transaction.
+There is another way to prevent transaction replay - check if the account to be created already exists. If it does, reject the transaction. The only problem with this is that accounts on the XRP ledger are deletable, and an easy attack would be to delete the account and replay the transaction.
 
 To prevent this, a design was considered where accounts created through cross-chain "account create" transactions would be undeletable. This has the nice property that the attestations no longer need to be added in order. However, it also introduces a new property on `AccountRoot`s that interacts with existing functionality.
 
-In the end, this design chose to pursue the "execution ordering" strategy. However, the undeletable account strategy is a viable solution with a different set of tradeoffs.
+In the end, this proposal chose to pursue the "execution ordering" strategy. However, the undeletable account strategy is a viable solution with a different set of tradeoffs.
 
 ## Appendix B: Extensions
 
@@ -885,10 +884,10 @@ The `XChainCreateAccountCommit` transaction can be extended to provide a refund 
 
 One alternate design that was implemented involved a set of servers similar to the witness servers called "federators". These servers communicated among themselves, collected signatures needed to submit transactions on behalf of the door accounts directly, and submitted those transactions.
 
-This design is attractive from a usability point of view. There is no "cross-chain sequence number" that needs to be obtained on the destination chain, and creating accounts using cross-chain transfers is straight forward.
+This design is attractive from a usability point of view. There is no "cross-chain sequence number" that needs to be obtained on the destination chain, and creating accounts using cross-chain transfers is straightforward.
 
 The main disadvantage of this design is the complexity in the federators. In order to submit a transaction, the federators need to agree on a transaction's sequence number and fees. This requires the federators to stay in "sync" with each other and requires that these federators be much more complex than the "witness" servers proposed in this design.
 
-In addition, handing fee escalation, failed transactions, and servers falling behind was much more complex.
+In addition, handling fee escalation, failed transactions, and servers falling behind was much more complex.
 
 Finally, because all the transactions were submitted from the same account (the door account), this presented a challenge for transaction throughput as the XRP ledger limits the number of transactions an account can submit in a single ledger.
