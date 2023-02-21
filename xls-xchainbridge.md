@@ -12,7 +12,7 @@ Affiliation: <a href="https://ripple.com">Ripple</a>
 
 ## Abstract
 
-A bridge connects two ledgers: a locking chain and an issuing chain (also called a mainchain and a sidechain). Both are independent ledgers, with their own validators and their own custom transactions. Importantly, there is a way to move assets from the locking chain to the issuing chain and a way to return those assets from the issuing chain back to the locking chain. This key operation is called a cross-chain transfer.  A cross-chain transfer is not a single transaction. It happens on two chains, requires multiple transactions, and involves an additional server type called a "witness".
+A bridge connects two ledgers: a locking chain and an issuing chain (also called a mainchain and a sidechain). Both are independent ledgers, with their own validators and potentially their own custom transactions. Importantly, there is a way to move assets from the locking chain to the issuing chain and a way to return those assets from the issuing chain back to the locking chain: the bridge. This key operation is called a cross-chain transfer.  In this proposal, a cross-chain transfer is not a single transaction. It happens on two chains, requires multiple transactions, and involves an additional server type called a "witness".
 
 A bridge does not exchange assets between two ledgers. Instead, it locks assets on one ledger (the "locking chain") and represents those assets with wrapped assets on another chain (the "issuing chain"). A good model to keep in mind is a box with an infinite supply of wrapped assets. Putting an asset from the locking chain into the box will release a wrapped asset onto the issuing chain. Putting a wrapped asset from the issuing chain back into the box will release one of the existing locking chain assets back onto the locking chain. There is no other way to get assets into or out of the box. Note that there is no way for the box to "run out of" wrapped assets - it has an infinite supply.
 
@@ -21,9 +21,9 @@ A bridge does not exchange assets between two ledgers. Instead, it locks assets 
 ### 1.1. Terminology
 
 -   **Bridge**: A method of moving assets from one blockchain to another.
--   **Locking chain**: The chain on which the assets originate. An asset is locked on this chain before it can represented on the issuing chain, and will remain locked while the issuing chain uses the asset.
+-   **Locking chain**: The chain on which the assets originate. An asset is locked on this chain before it can be represented on the issuing chain, and will remain locked while the issuing chain uses the asset.
 -   **Issuing chain**: The chain on which the assets from the locking chain are wrapped. The issuing chain issues assets that represent assets that are locked on the locking chain.
--   **Cross-chain transfer**: A protocol that moves assets from the locking chain to the issuing chain, or returns those assets from the issuing chain back to the locking chain. 
+-   **Cross-chain transfer**: A protocol that moves assets from the locking chain to the issuing chain, or returns those assets from the issuing chain back to the locking chain. This generally means that the locking chain locks and unlocks a token, while the issuing chain mints and burns a wrapped version of that token. Usually (but not always), the mainchain will be locking and unlocking a token, and the sidechain will be minting and burning the wrapped version.
 -   **Source chain**: The chain that a cross-chain transfer begins from. The transfer is from the source chain and to the destination chain.
 -   **Destination chain**: The chain that a cross-chain transfer ends at. The transfer is from the source chain and to the destination chain.
 -   **Door account**: The account on the locking chain that is used to put assets into trust, or the account on the issuing chain used to issue wrapped assets. The name comes from the idea that a door is used to move from one room to another and a door account is used to move assets from one chain to another.
@@ -67,7 +67,7 @@ A cross-chain transfer moves assets from the locking chain to the issuing chain,
 
 1. Put assets into trust (lock assets) on the locking chain.
 
-2. Issue wrapped assets on the issuing chain.
+2. Issue or mint wrapped assets on the issuing chain.
 
 3. Return or burn the wrapped assets on the issuing chain.
 
@@ -75,13 +75,13 @@ A cross-chain transfer moves assets from the locking chain to the issuing chain,
 
 5. On the locking chain, prove that assets were returned or burned on the issuing chain.
 
-6. A way to prevent the same assets from being wrapped multiple times (prevent transaction replay). The proofs that certain events happened on the different chains are public and can therefore be submitted multiple times. This must be valid only once to wrap or unlock assets.
+6. A way to prevent the same assets from being wrapped multiple times (prevent transaction replay). The proofs that certain events happened on the different chains are public and can therefore theoretically be submitted multiple times. This must be valid only once to wrap or unlock assets.
 
 ##### 1.3.1.2. Process
 
 In this scenario, a user is trying to transfer funds from their account on the source chain to their account on the destination chain.
 
-1.  The user creates a cross-chain claim ID on the destination chain, via the **`XChainCreateClaimID`** transaction. The cross-chain claim ID must specify the source account on the other chain. This creates a **`XChainOwnedClaimID`** ledger object.
+1.  The user creates a cross-chain claim ID on the destination chain, via the **`XChainCreateClaimID`** transaction. This creates a **`XChainOwnedClaimID`** ledger object. The ledger object must specify the source account on the source chain.
 2.  The user submits a **`XChainCommit`** transaction on the source chain, attaching the claimed cross-chain claim ID and including a reward amount (`SignatureReward`) for the witness servers. This locks or burns the asset on the source chain, depending on whether the source chain is a locking or issuing chain. This transaction must be submitted from the same account that was specified when creating the claim ID.
 3.  The **witness server** signs an attestation saying that the funds were locked/burned on the source chain. This is then submitted as a **`XChainAddClaimAttestation`** transaction on the destination chain.
 4.  When there is a quorum of witness attestations, the funds can be claimed on the destination chain. If a destination account is included in the initial transfer, then the funds automatically transfer when quorum is reached. Otherwise, the user can submit a **`XChainClaim`** transaction for the transferred value on the destination chain.
