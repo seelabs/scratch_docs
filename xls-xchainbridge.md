@@ -1,5 +1,5 @@
 <pre>
-Title:       <b>Cross-Chain Bridge Support</b>
+Title:       <b>Cross-Chain Bridge</b>
 Revision:    <b>1</b> (2023-02-22)
 
 Author:      <a href="mailto:mvadari@ripple.com">Mayukha Vadari</a>
@@ -8,7 +8,7 @@ Author:      <a href="mailto:mvadari@ripple.com">Mayukha Vadari</a>
 Affiliation: <a href="https://ripple.com">Ripple</a>
 </pre>
 
-# Cross-Chain Bridge Support
+# Cross-Chain Bridge
 
 ## Abstract
 
